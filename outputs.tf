@@ -26,6 +26,10 @@ output "consul_version" {
   value = hcp_consul_cluster.primary.consul_version
 }
 
+output "nomad_server_http" {
+  value = "http://${aws_instance.nomad.public_ip}:4646"
+}
+
 output "ssh_key" {
   value = nonsensitive(tls_private_key.bastion_ssh_key.private_key_pem)
 }

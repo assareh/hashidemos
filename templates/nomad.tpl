@@ -29,6 +29,7 @@ echo '${consul_config_file}' | base64 -d > /etc/consul.d/config.json
 echo '{"ca_file":"/etc/consul.d/ca.pem", "acl":{"tokens":{"default":"${consul_token}"}}}' > /etc/consul.d/overrides.json
 
 # Set permissions
+sudo mv /home/${ssh_username}/consul.hcl /etc/consul.d/consul_bind.hcl
 sudo chown -R consul:consul /etc/consul.d
 sudo chmod 640 /etc/consul.d/*
 
@@ -39,10 +40,12 @@ sudo systemctl start consul
 # Save Nomad license
 echo ${nomad_license} | sudo tee -a /etc/nomad.d/license.hclic
 
-# Save Vault token for Nomad
-vault agent 
+# Auth to Vault
+sed -i 's|VAULT_ADDR|${vault_addr}|g' /home/${ssh_username}/vault-agent-bootstrap.hcl
+cd /home/${ssh_username} && vault agent -config vault-agent-bootstrap.hcl
 
-echo ${vault_token} | tee -a /home/${ssh_username}/nomad.env
+# Save Vault token for Nomad
+mv vault-token-via-agent /home/${ssh_username}/nomad.env
 sed -i '1s/^/VAULT_TOKEN=/' /home/${ssh_username}/nomad.env
 sudo mv /home/${ssh_username}/nomad.env /etc/nomad.d/nomad.env
 
@@ -58,7 +61,3 @@ sudo chmod 400 /etc/nomad.d/nomad.env
 # Start Nomad
 sudo systemctl enable nomad
 sudo systemctl start nomad
-
-# Configure environment
-echo export VAULT_ADDR="${vault_addr}" | sudo tee -a /home/ubuntu/.bashrc
-echo export VAULT_TOKEN="${vault_token}" | sudo tee -a /home/ubuntu/.bashrc

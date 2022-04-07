@@ -66,8 +66,8 @@ resource "hcp_vault_cluster_admin_token" "admin" {
 
 # -------------------- AWS resources -------------------->
 # create a vpc, subnet, transit gateway, etc
-# create a bastion host
-# create a tfc-agent host and associated iam instance profile
+# create a bastion host / tfc-agent host and associated iam instance profile
+# create a nomad host and associated iam instance profile
 # create an iam user for vault aws auth method to use
 
 provider "aws" {
@@ -128,6 +128,13 @@ resource "aws_security_group" "hashidemos" {
   ingress {
     from_port   = 22
     to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed-source-ip]
+  }
+
+  ingress {
+    from_port   = 4646
+    to_port     = 4646
     protocol    = "tcp"
     cidr_blocks = [var.allowed-source-ip]
   }
@@ -236,6 +243,47 @@ data "aws_iam_policy_document" "agent_assume_role_policy_definition" {
   }
 }
 
+resource "aws_instance" "nomad" {
+  ami                         = data.hcp_packer_image.hashidemos.cloud_image_id
+  associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.nomad.name
+  instance_type               = var.instance_type
+  key_name                    = aws_key_pair.hashidemos.key_name
+  subnet_id                   = aws_subnet.hashidemos.id
+  vpc_security_group_ids      = [aws_security_group.hashidemos.id]
+
+  user_data = templatefile("${path.module}/templates/nomad.tpl", {
+    consul_http_addr   = hcp_consul_cluster.primary.consul_private_endpoint_url
+    consul_ca_file     = hcp_consul_cluster.primary.consul_ca_file
+    consul_config_file = hcp_consul_cluster.primary.consul_config_file
+    consul_token       = hcp_consul_cluster.primary.consul_root_token_secret_id
+    nomad_license      = var.nomad_license
+    ssh_username       = var.ssh_username
+    vault_addr         = hcp_vault_cluster.primary.vault_private_endpoint_url
+  })
+}
+
+resource "aws_iam_instance_profile" "nomad" {
+  name = "hashidemos-nomad-profile"
+  role = aws_iam_role.nomad.name
+}
+
+resource "aws_iam_role" "nomad" {
+  name               = "hashidemos-nomad-role"
+  assume_role_policy = data.aws_iam_policy_document.nomad_assume_role_policy_definition.json
+}
+
+data "aws_iam_policy_document" "nomad_assume_role_policy_definition" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      identifiers = ["ec2.amazonaws.com"]
+      type        = "Service"
+    }
+  }
+}
+
 // resource "aws_iam_role_policy" "agent_policy" {
 //   name = "${var.prefix}-ecs-tfc-agent-policy"
 //   role = aws_iam_role.agent.id
@@ -313,7 +361,7 @@ data "aws_iam_policy_document" "demo_user" {
 }
 
 resource "aws_iam_access_key" "vault" {
-  user    = aws_iam_user.demo_user.name
+  user = aws_iam_user.demo_user.name
 }
 
 # -------------------- TFC resources -------------------->
@@ -339,9 +387,11 @@ resource "tfe_agent_token" "aws" {
 resource "tfe_workspace" "hashidemos-vault" {
   depends_on = [hcp_vault_cluster_admin_token.admin]
 
-  auto_apply   = true
-  name         = "hashidemos-vault"
-  organization = var.org
+  agent_pool_id  = tfe_agent_pool.aws.id
+  auto_apply     = true
+  execution_mode = "agent"
+  name           = "hashidemos-vault"
+  organization   = var.org
   # queue_all_runs    = false
   terraform_version = "1.1.7"
   working_directory = "vault"
@@ -377,7 +427,7 @@ resource "tfe_variable" "aws_secret_access_key" {
 resource "tfe_variable" "vault_addr" {
   category     = "env"
   key          = "VAULT_ADDR"
-  value        = hcp_vault_cluster.primary.vault_public_endpoint_url
+  value        = hcp_vault_cluster.primary.vault_private_endpoint_url
   workspace_id = tfe_workspace.hashidemos-vault.id
 }
 
@@ -394,22 +444,4 @@ resource "tfe_variable" "nomad_token_bound_cidrs" {
   key          = "nomad_token_bound_cidrs"
   value        = var.subnet_prefix
   workspace_id = tfe_workspace.hashidemos-vault.id
-}
-
-resource "tfe_workspace" "hashidemos-nomad" {
-  depends_on = [tfe_workspace.hashidemos-vault]
-
-  agent_pool_id  = tfe_agent_pool.aws.id
-  auto_apply     = true
-  execution_mode = "agent"
-  name           = "hashidemos-nomad"
-  organization   = var.org
-  # queue_all_runs    = false
-  terraform_version = "1.1.7"
-  working_directory = "nomad"
-
-  vcs_repo {
-    identifier     = "assareh/hashidemos"
-    oauth_token_id = var.oauth_token
-  }
 }

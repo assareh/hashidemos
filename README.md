@@ -29,9 +29,12 @@ TODO
 - sample application(s) with a database (transit-app-example, hashicups, etc)
 - perhaps give it a dns record
 - probably need to roll out remote state and run triggers in case values change
+- packer pipeline somewhere so it has aws access, and have a base then app specific
 
 ## prerequisites / steps
 - [Packer](https://github.com/assareh/packer) has been run
+- Configure [HCP Packer run task]() on this workspace
+- Configure [prevent workspace delete]() sentinel policy on this workspace
 - nomad enterprise license, other tfvars
 - [AWS](https://registry.terraform.io/providers/hashicorp/aws/latest/docs#authentication-and-configuration), [HCP](https://registry.terraform.io/providers/hashicorp/hcp/latest/docs#authenticating-with-hcp), [TFC](https://registry.terraform.io/providers/hashicorp/tfe/latest/docs#authentication) credentials
 
