@@ -5,16 +5,12 @@
 # Capture and redirect
 exec 3>&1 4>&2
 trap 'exec 2>&4 1>&3' 0 1 2 3
-exec 1>/home/${ssh_username}/setup_nomad.log 2>&1
+exec 1>/home/${ssh_username}/setup_worker.log 2>&1
 
-# Everything below will go to the file 'setup_nomad.log':
+# Everything below will go to the file 'setup_worker.log':
 
 # Print executed commands for debugging
 set -x
-
-# Set hostname because it's used for Consul and Nomad names
-sudo hostnamectl set-hostname nomad-server
-echo '127.0.1.1       nomad-server.unassigned-domain        nomad-server' | sudo tee -a /etc/hosts
 
 # Create the Consul config
 %{ if consul_ca_file != "" }
@@ -36,26 +32,38 @@ sudo chmod 640 /etc/consul.d/*
 sudo systemctl enable consul
 sudo systemctl start consul
 
+# Create the Nomad config
+cat <<EOF >/home/${ssh_username}/nomad.hcl
+# Full configuration options can be found at https://www.nomadproject.io/docs/configuration
+
+advertise {
+  http = "{{ GetInterfaceIP \`ens5\` }}"
+  rpc  = "{{ GetInterfaceIP \`ens5\` }}"
+  serf = "{{ GetInterfaceIP \`ens5\` }}"
+}
+
+bind_addr = "0.0.0.0"
+
+client {
+  enabled = true
+  servers = ["${nomad_addr}:4647"]
+}
+
+data_dir = "/opt/nomad/data"
+
+leave_on_terminate = true
+
+log_level = "INFO"
+EOF
+
+sudo mv /home/${ssh_username}/nomad.hcl /etc/nomad.d/.
+
 # Save Nomad license
 echo ${nomad_license} | sudo tee -a /etc/nomad.d/license.hclic
-
-# Auth to Vault
-sed -i 's|VAULT_ADDR|${vault_addr}|g' /home/${ssh_username}/vault-agent-bootstrap.hcl
-cd /home/${ssh_username} && vault agent -config vault-agent-bootstrap.hcl
-
-# Save Vault token for Nomad
-mv vault-token-via-agent /home/${ssh_username}/nomad.env
-sed -i '1s/^/VAULT_TOKEN=/' /home/${ssh_username}/nomad.env
-sudo mv /home/${ssh_username}/nomad.env /etc/nomad.d/nomad.env
-
-# Save Vault cluster address in Nomad config
-sed -i 's|VAULT_ADDR|${vault_addr}|g' /home/${ssh_username}/nomad.hcl
-sudo mv /home/${ssh_username}/nomad.hcl /etc/nomad.d/.
 
 # Set permissions
 sudo chown -R nomad:nomad /etc/nomad.d
 sudo chmod 640 /etc/nomad.d/nomad.hcl /etc/nomad.d/license.hclic
-sudo chmod 400 /etc/nomad.d/nomad.env
 
 # Start Nomad
 sudo systemctl enable nomad

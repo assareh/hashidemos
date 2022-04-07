@@ -3,10 +3,6 @@ variable "allowed-source-ip" {
   description = "Your IP address to allow traffic from in CIDR notation."
 }
 
-// variable "aws-account" {
-//   description = "The AWS account ID which holds the AMI."
-// }
-
 variable "nomad_license" {
   description = "Nomad Enterprise license from HashiCorp."
   type        = string
@@ -21,9 +17,9 @@ variable "owner" {
   type        = string
 }
 
-variable "prefix" {
-  description = "This prefix will be included in the name of most resources."
-}
+// variable "prefix" {
+//   description = "This prefix will be included in the name of most resources."
+// }
 
 variable "se-region" {
   description = "Your region assignment here, this is used to tag resources. NOT cloud region"
@@ -61,18 +57,10 @@ variable "hvn_route_id" {
   default     = "hcp-hvn-route"
 }
 
-
-// variable "prefix" {
-//   type    = string
-//   default = "hashidemos"
-// }
-
-
 variable "purpose" {
   type    = string
   default = "Demo HashiStack"
 }
-
 
 variable "terraform" {
   type    = string

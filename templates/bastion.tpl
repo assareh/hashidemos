@@ -17,7 +17,7 @@ set -x
 sudo hostnamectl set-hostname hashidemos-bastion
 echo '127.0.1.1       hashidemos-bastion.unassigned-domain        hashidemos-bastion' | sudo tee -a /etc/hosts
 
-# Create the consul config
+# Create the Consul config
 %{ if consul_ca_file != "" }
 echo '${consul_ca_file}' | base64 -d > /etc/consul.d/ca.pem
 %{ endif }
@@ -37,8 +37,12 @@ sudo systemctl enable consul
 sudo systemctl start consul
 
 # Configure environment
-echo export VAULT_ADDR="${vault_addr}" | sudo tee -a /home/ubuntu/.bashrc
-echo export VAULT_TOKEN="${vault_token}" | sudo tee -a /home/ubuntu/.bashrc
+echo export VAULT_ADDR="${vault_addr}" | sudo tee -a /home/${ssh_username}/.bashrc
+echo export VAULT_TOKEN="${vault_token}" | sudo tee -a /home/${ssh_username}/.bashrc
 
 # Run a Terraform Cloud Agent
 sudo docker run -d -e TFC_AGENT_TOKEN=${tfc_agent_token} -e TFC_AGENT_NAME=ec2 hashicorp/tfc-agent:latest
+
+# Save the private key (can remove once Boundary is in place)
+echo '${private_key}' | sudo tee -a /home/${ssh_username}/bastion-ssh-key.pem
+chmod 400 /home/${ssh_username}/bastion-ssh-key.pem

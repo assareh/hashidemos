@@ -210,6 +210,7 @@ resource "aws_instance" "bastion" {
     consul_ca_file     = hcp_consul_cluster.primary.consul_ca_file
     consul_config_file = hcp_consul_cluster.primary.consul_config_file
     consul_token       = hcp_consul_cluster.primary.consul_root_token_secret_id
+    private_key        = tls_private_key.bastion_ssh_key.private_key_pem
     ssh_username       = var.ssh_username
     tfc_agent_token    = tfe_agent_token.aws.token
     vault_addr         = hcp_vault_cluster.primary.vault_private_endpoint_url
@@ -225,11 +226,6 @@ resource "aws_iam_instance_profile" "agent" {
 resource "aws_iam_role" "agent" {
   name               = "hashidemos-tfc-agent-role"
   assume_role_policy = data.aws_iam_policy_document.agent_assume_role_policy_definition.json
-}
-
-resource "aws_iam_role_policy_attachment" "agent_ec2_role_attach" {
-  role       = aws_iam_role.agent.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
 }
 
 data "aws_iam_policy_document" "agent_assume_role_policy_definition" {
@@ -284,41 +280,6 @@ data "aws_iam_policy_document" "nomad_assume_role_policy_definition" {
   }
 }
 
-// resource "aws_iam_role_policy" "agent_policy" {
-//   name = "${var.prefix}-ecs-tfc-agent-policy"
-//   role = aws_iam_role.agent.id
-
-//   policy = data.aws_iam_policy_document.agent_policy_definition.json
-// }
-
-// data "aws_iam_policy_document" "agent_policy_definition" {
-//   statement {
-//     effect    = "Allow"
-//     actions   = ["sts:AssumeRole"]
-//     resources = [aws_iam_role.terraform_dev_role.arn]
-//   }
-// }
-
-// resource "aws_iam_role_policy_attachment" "agent_task_policy" {
-//   role       = aws_iam_role.agent.name
-//   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-// }
-
-// data "aws_iam_policy_document" "dev_assume_role_policy_definition" {
-//   statement {
-//     effect  = "Allow"
-//     actions = ["sts:AssumeRole"]
-//     principals {
-//       identifiers = ["ecs-tasks.amazonaws.com"]
-//       type        = "Service"
-//     }
-//     principals {
-//       identifiers = [aws_iam_role.agent.arn]
-//       type        = "AWS"
-//     }
-//   }
-// }
-
 locals {
   my_email = split("/", data.aws_caller_identity.current.arn)[2]
 }
@@ -364,12 +325,30 @@ resource "aws_iam_access_key" "vault" {
   user = aws_iam_user.demo_user.name
 }
 
+module "aws-workers" {
+  source        = "./modules/aws-workers"
+  image_id      = data.hcp_packer_image.hashidemos.cloud_image_id
+  instance_type = var.instance_type
+  key_name      = aws_key_pair.hashidemos.key_name
+  userdata_script = base64encode(templatefile("${path.module}/templates/worker.tpl", {
+    consul_http_addr   = hcp_consul_cluster.primary.consul_private_endpoint_url
+    consul_ca_file     = hcp_consul_cluster.primary.consul_ca_file
+    consul_config_file = hcp_consul_cluster.primary.consul_config_file
+    consul_token       = hcp_consul_cluster.primary.consul_root_token_secret_id
+    nomad_addr         = aws_instance.nomad.private_ip
+    nomad_license      = var.nomad_license
+    ssh_username       = var.ssh_username
+  }))
+  worker_subnets         = [aws_subnet.hashidemos.id]
+  vpc_id                 = aws_vpc.hashidemos.id
+  vpc_security_group_ids = [aws_security_group.hashidemos.id]
+}
+
 # -------------------- TFC resources -------------------->
 # create a remote agent
 # create a workspace for vault provider stuffs
 # create a workspace for consul provider stuffs
-# create a workspace for nomad server
-# create workspaces of worker nodes
+# create a workspace for nomad provider stuffs
 
 provider "tfe" {
 }
@@ -385,21 +364,29 @@ resource "tfe_agent_token" "aws" {
 }
 
 resource "tfe_workspace" "hashidemos-vault" {
-  depends_on = [hcp_vault_cluster_admin_token.admin]
-
-  agent_pool_id  = tfe_agent_pool.aws.id
-  auto_apply     = true
-  execution_mode = "agent"
-  name           = "hashidemos-vault"
-  organization   = var.org
-  # queue_all_runs    = false
+  agent_pool_id     = tfe_agent_pool.aws.id
+  auto_apply        = true
+  execution_mode    = "agent"
+  name              = "hashidemos-vault"
+  organization      = var.org
+  queue_all_runs    = false
   terraform_version = "1.1.7"
-  working_directory = "vault"
+  working_directory = "workspaces/vault"
 
   vcs_repo {
     identifier     = "assareh/hashidemos"
     oauth_token_id = var.oauth_token
   }
+}
+
+data "tfe_workspace" "this" {
+  name         = "hashidemos"
+  organization = var.org
+}
+
+resource "tfe_run_trigger" "hashidemos-vault" {
+  sourceable_id = data.tfe_workspace.this.id
+  workspace_id  = tfe_workspace.hashidemos-vault.id
 }
 
 resource "tfe_variable" "aws_access_key_id" {
@@ -444,4 +431,20 @@ resource "tfe_variable" "nomad_token_bound_cidrs" {
   key          = "nomad_token_bound_cidrs"
   value        = var.subnet_prefix
   workspace_id = tfe_workspace.hashidemos-vault.id
+}
+
+# Not pretty but need to manually queue a plan
+resource "null_resource" "terraform-plan" {
+  depends_on = [
+    tfe_variable.aws_access_key_id,
+    tfe_variable.aws_account_id,
+    tfe_variable.aws_secret_access_key,
+    tfe_variable.vault_addr,
+    tfe_variable.vault_token,
+    tfe_variable.nomad_token_bound_cidrs,
+  ]
+
+  provisioner "local-exec" {
+    command = "curl --header \"Authorization: Bearer $TFE_TOKEN\" --header \"Content-Type: application/vnd.api+json\" -d '{\"data\":{\"attributes\":{\"message\":\"Queued from Terraform\"},\"type\":\"runs\",\"relationships\":{\"workspace\":{\"data\":{\"type\":\"workspaces\",\"id\":\"${tfe_workspace.hashidemos-vault.id}\"}}}}}' https://app.terraform.io/api/v2/runs"
+  }
 }
