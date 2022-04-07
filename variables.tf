@@ -30,7 +30,7 @@ variable "se-region" {
 # -------------------- the rest -------------------->
 
 variable "hcp_packer_channel" {
-  default = "devtest"
+  default = "production"
 }
 
 variable "aws_tgw_bgp_asn" {

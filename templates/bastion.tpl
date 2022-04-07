@@ -29,6 +29,7 @@ echo '${consul_config_file}' | base64 -d > /etc/consul.d/config.json
 echo '{"ca_file":"/etc/consul.d/ca.pem", "acl":{"tokens":{"default":"${consul_token}"}}}' > /etc/consul.d/overrides.json
 
 # Set permissions
+sudo mv /home/${ssh_username}/consul.hcl /etc/consul.d/consul.hcl
 sudo chown -R consul:consul /etc/consul.d
 sudo chmod 640 /etc/consul.d/*
 
@@ -39,6 +40,8 @@ sudo systemctl start consul
 # Configure environment
 echo export VAULT_ADDR="${vault_addr}" | sudo tee -a /home/${ssh_username}/.bashrc
 echo export VAULT_TOKEN="${vault_token}" | sudo tee -a /home/${ssh_username}/.bashrc
+echo export CONSUL_HTTP_TOKEN="${consul_token}" | sudo tee -a /home/${ssh_username}/.bashrc
+echo export CONSUL_HTTP_ADDR="${consul_http_addr}" | sudo tee -a /home/${ssh_username}/.bashrc
 
 # Run a Terraform Cloud Agent
 sudo docker run -d -e TFC_AGENT_TOKEN=${tfc_agent_token} -e TFC_AGENT_NAME=ec2 hashicorp/tfc-agent:latest
@@ -46,3 +49,4 @@ sudo docker run -d -e TFC_AGENT_TOKEN=${tfc_agent_token} -e TFC_AGENT_NAME=ec2 h
 # Save the private key (can remove once Boundary is in place)
 echo '${private_key}' | sudo tee -a /home/${ssh_username}/bastion-ssh-key.pem
 chmod 400 /home/${ssh_username}/bastion-ssh-key.pem
+chown ubuntu:ubuntu /home/${ssh_username}/bastion-ssh-key.pem

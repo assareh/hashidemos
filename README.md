@@ -19,17 +19,19 @@ This is intended to be a complete Hashistack demo environment.
 - this workspace creates the control plane infra, plus a hashidemos-vault workspace for vault provider
 
 TODO
-- should be able to estimate the costs to a certain extent
-- document and diagram
-- k3s and federation
-- consul admin partitions for k3s
+- Nomad is broken until I can figure out HCP Consul TLS client certs
+- k3s and consul admin partitions
 - sample application(s) with a database (transit-app-example, hashicups, etc)
 - perhaps give nomad server a dns record
 - packer pipeline somewhere so it has aws access, and have a base then app specific
-- nomad server TLS and ACLs
 - lock down NSGs
 - get DNS forwarded to consul
 - i think ip address outputs need to be on data sources so they stay up to date
+- maybe use mitchell's multi workspace provider
+- tags not propogating to aws workers for some reason
+- nomad dc#, TLS and ACLs
+- document and diagram
+- should be able to estimate the costs to a certain extent
 
 ## prerequisites / steps
 - [Packer](https://github.com/assareh/packer) has been run

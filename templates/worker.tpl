@@ -23,8 +23,21 @@ echo '${consul_config_file}' | base64 -d > /etc/consul.d/config.json
 
 echo '{"ca_file":"/etc/consul.d/ca.pem", "acl":{"tokens":{"default":"${consul_token}"}}}' > /etc/consul.d/overrides.json
 
+# cat <<EOF >/home/${ssh_username}/consul.hcl
+# bind_addr = "{{ GetInterfaceIP \`ens5\` }}"
+# connect {
+#   enabled = true
+# }
+# data_dir = "/opt/consul/data"
+# ports {
+#   grpc  = 8502
+#   http  = -1
+#   https = 8501
+# }
+# EOF
+
 # Set permissions
-sudo mv /home/${ssh_username}/consul.hcl /etc/consul.d/consul_bind.hcl
+sudo mv /home/${ssh_username}/consul.hcl /etc/consul.d/consul.hcl
 sudo chown -R consul:consul /etc/consul.d
 sudo chmod 640 /etc/consul.d/*
 
@@ -33,28 +46,36 @@ sudo systemctl enable consul
 sudo systemctl start consul
 
 # Create the Nomad config
-cat <<EOF >/home/${ssh_username}/nomad.hcl
-# Full configuration options can be found at https://www.nomadproject.io/docs/configuration
+# cat <<EOF >/home/${ssh_username}/nomad.hcl
+# # Full configuration options can be found at https://www.nomadproject.io/docs/configuration
 
-advertise {
-  http = "{{ GetInterfaceIP \`ens5\` }}"
-  rpc  = "{{ GetInterfaceIP \`ens5\` }}"
-  serf = "{{ GetInterfaceIP \`ens5\` }}"
-}
+# advertise {
+#   http = "{{ GetInterfaceIP \`ens5\` }}"
+#   rpc  = "{{ GetInterfaceIP \`ens5\` }}"
+#   serf = "{{ GetInterfaceIP \`ens5\` }}"
+# }
 
-bind_addr = "0.0.0.0"
+# bind_addr = "0.0.0.0"
 
-client {
-  enabled = true
-  servers = ["${nomad_addr}:4647"]
-}
+# client {
+#   enabled = true
+#   servers = ["${nomad_addr}:4647"]
+# }
 
-data_dir = "/opt/nomad/data"
+# consul {
+#   address   = "127.0.0.1:8501"
+#   ca_file   = "/etc/nomad.d/ca.pem"
+#   cert_file = "/etc/nomad.d/dc1-client-consul.pem"
+#   key_file  = "/etc/nomad.d/dc1-client-consul-key.pem"
+#   ssl       = true
+# }
 
-leave_on_terminate = true
+# data_dir = "/opt/nomad/data"
 
-log_level = "INFO"
-EOF
+# leave_on_terminate = true
+
+# log_level = "INFO"
+# EOF
 
 sudo mv /home/${ssh_username}/nomad.hcl /etc/nomad.d/.
 

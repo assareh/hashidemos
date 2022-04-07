@@ -28,7 +28,7 @@ echo '${consul_config_file}' | base64 -d > /etc/consul.d/config.json
 echo '{"ca_file":"/etc/consul.d/ca.pem", "acl":{"tokens":{"default":"${consul_token}"}}}' > /etc/consul.d/overrides.json
 
 # Set permissions
-sudo mv /home/${ssh_username}/consul.hcl /etc/consul.d/consul_bind.hcl
+sudo mv /home/${ssh_username}/consul.hcl /etc/consul.d/consul.hcl
 sudo chown -R consul:consul /etc/consul.d
 sudo chmod 640 /etc/consul.d/*
 
