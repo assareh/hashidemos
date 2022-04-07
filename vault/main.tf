@@ -24,19 +24,20 @@ resource "vault_aws_auth_backend_client" "example" {
 }
 
 resource "vault_aws_auth_backend_role" "nomad" {
-  backend                         = vault_auth_backend.aws.path
-  role                            = "nomad"
-  auth_type                       = "ec2"
-  bound_account_ids               = [var.aws_account_id]
+  auth_type         = "ec2"
+  backend           = vault_auth_backend.aws.path
+  bound_account_ids = [var.aws_account_id]
+  role              = "nomad"
   // bound_vpc_ids                   = ["vpc-b61106d4"]
   // bound_subnet_ids                = ["vpc-133128f1"]
   // bound_iam_role_arns             = ["arn:aws:iam::123456789012:role/MyRole"]
   // bound_iam_instance_profile_arns = ["arn:aws:iam::123456789012:instance-profile/MyProfile"]
   // inferred_entity_type            = "ec2_instance"
   // inferred_aws_region             = "us-east-1"
-  token_ttl                       = 60
-  token_max_ttl                   = 120
-  token_policies                  = ["default", "nomad-server"]
+  token_bound_cidrs      = [var.nomad_token_bound_cidrs]
+  token_explicit_max_ttl = "0"
+  token_period           = "1800"
+  token_policies         = ["default", "nomad-server"]
 }
 
 resource "vault_policy" "nomad-server" {
